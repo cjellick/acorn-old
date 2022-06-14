@@ -33,6 +33,9 @@ func complete(c *apiv1.Config) {
 	if len(c.ClusterDomains) == 0 {
 		c.ClusterDomains = []string{ClusterDomainPublic}
 	}
+	if c.AcornDNSEndpoint == "" {
+		c.AcornDNSEndpoint = "http://192.168.1.25:4315/v1"
+	}
 }
 
 func merge(oldConfig, newConfig *apiv1.Config) *apiv1.Config {
