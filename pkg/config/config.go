@@ -13,10 +13,6 @@ import (
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	ClusterDomainPublic = ".on-acorn.io" // ah here it is
-)
-
 func complete(c *apiv1.Config) {
 	if c.IngressClassName == nil {
 		c.IngressClassName = new(string)
@@ -29,9 +25,6 @@ func complete(c *apiv1.Config) {
 	}
 	if c.PodSecurityEnforceProfile == "" && *c.SetPodSecurityEnforceProfile {
 		c.PodSecurityEnforceProfile = "baseline"
-	}
-	if len(c.ClusterDomains) == 0 {
-		c.ClusterDomains = []string{ClusterDomainPublic}
 	}
 	if c.AcornDNSEndpoint == "" {
 		c.AcornDNSEndpoint = "http://192.168.1.25:4315/v1"
@@ -98,6 +91,14 @@ func Incomplete(ctx context.Context, getter kclient.Reader) (*apiv1.Config, erro
 	config := &apiv1.Config{}
 	if err := json.Unmarshal([]byte(cm.Data["config"]), config); err != nil {
 		return nil, err
+	}
+
+	dnsCM := &corev1.ConfigMap{}
+	if err := getter.Get(ctx, router.Key(system.Namespace, system.DNSConfigName), dnsCM); err == nil {
+		domain := dnsCM.Data["domain"]
+		if domain != "" {
+			config.ClusterDomains = []string{domain}
+		}
 	}
 
 	return config, nil

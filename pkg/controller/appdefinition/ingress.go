@@ -8,17 +8,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/acorn-io/acorn/pkg/adnsclient"
 	v1 "github.com/acorn-io/acorn/pkg/apis/acorn.io/v1"
 	"github.com/acorn-io/acorn/pkg/config"
 	"github.com/acorn-io/acorn/pkg/labels"
-	"github.com/acorn-io/acorn/pkg/system"
 	"github.com/acorn-io/baaah/pkg/router"
 	"github.com/acorn-io/baaah/pkg/typed"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	apierror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -138,22 +135,13 @@ func rule(host, serviceName string, port int32) networkingv1.IngressRule {
 	}
 }
 
-func requestDomain(dnsClient adnsclient.Client, appInstance *v1.AppInstance) (string, string, error) {
-	var ns string
-	if appInstance.Namespace != system.DefaultUserNamespace {
-		// send this as part of the request
-		ns = appInstance.Namespace
-	}
-
-	return dnsClient.CreateDomain(ns)
-}
-
-func toFQDN(containerName string, appInstance *v1.AppInstance, domain string) string {
+func toPrefix(containerName string, appInstance *v1.AppInstance) string {
 	hostPrefix := containerName + "." + appInstance.Name
 	if containerName == "default" {
 		hostPrefix = appInstance.Name
 	}
-	return hostPrefix + "." + domain
+	hostPrefix += "." + appInstance.Namespace
+	return hostPrefix
 }
 
 func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Response) error {
@@ -166,8 +154,6 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 	if err != nil {
 		return err
 	}
-
-	dnsClient := adnsclient.NewClient(cfg.AcornDNSEndpoint)
 
 	var ingressClassName *string
 	if *cfg.IngressClassName != "" {
@@ -207,6 +193,8 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 			continue
 		}
 
+		hostPrefix := toPrefix(containerName, appInstance)
+
 		defaultPort, ok := httpPorts[80]
 		if !ok {
 			defaultPort = httpPorts[typed.SortedKeys(httpPorts)[0]]
@@ -220,64 +208,23 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 		for _, binding := range appInstance.Spec.Endpoints {
 			if binding.Target == containerName {
 				hosts = append(hosts, binding.Hostname)
-				// TODO Understand how to get to this logic and if we need to consider these rules
 				rules = append(rules, rule(binding.Hostname, containerName, defaultPort.Port))
 			}
 		}
 
 		addClusterDomains := len(hosts) == 0
-		// TODO are we being idempotent?
-		if addClusterDomains {
-			var domain, token string
-			var err error
-			cm := &corev1.ConfigMap{}
-			err = req.Get(cm, req.Namespace, "acorn-dns")
-			if err != nil && !apierror.IsNotFound(err) {
-				return err
+
+		for _, domain := range cfg.ClusterDomains {
+			if addClusterDomains {
+				hosts = append(hosts, hostPrefix+domain)
 			}
-
-			var forceRecreate bool
-			if err == nil {
-				domain = cm.Data["domain"]
-				token = cm.Data["token"]
-				// Shouldn't get into this scenario, but have to do something if the keys aren't there
-				if domain == "" || token == "" {
-					forceRecreate = true
-					req.Client.Delete(req.Ctx, &corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "acorn-dns",
-							Namespace: req.Namespace,
-						},
-					})
-				}
-			}
-
-			if apierror.IsNotFound(err) || forceRecreate {
-				domain, token, err = requestDomain(dnsClient, appInstance)
-				if err != nil {
-					return err
-				}
-
-				err = req.Client.Create(req.Ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "acorn-dns",
-						Namespace: req.Namespace,
-					},
-					Data: map[string]string{"domain": domain, "token": token},
-				})
-				if err != nil {
-					return err
-				}
-			}
-
-			fqdn := toFQDN(containerName, appInstance, domain)
-			hosts = append(hosts, fqdn)
-			rules = append(rules, rule(fqdn, containerName, defaultPort.Port))
-
+			rules = append(rules, rule(hostPrefix+domain, containerName, defaultPort.Port))
 			for _, alias := range entry.Value.Aliases {
-				aliasFQDN := toFQDN(alias.Name, appInstance, domain)
-				hosts = append(hosts, aliasFQDN)
-				rules = append(rules, rule(aliasFQDN, alias.Name, defaultPort.Port))
+				aliasPrefix := toPrefix(alias.Name, appInstance)
+				if addClusterDomains {
+					hosts = append(hosts, aliasPrefix+domain)
+				}
+				rules = append(rules, rule(aliasPrefix+domain, alias.Name, defaultPort.Port))
 			}
 		}
 

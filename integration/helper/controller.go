@@ -137,7 +137,7 @@ func StartController(t *testing.T) {
 	}
 
 	lock(context.Background(), k8s, func(ctx context.Context) {
-		c, err := controller.New()
+		c, err := controller.New(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

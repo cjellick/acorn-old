@@ -4,6 +4,7 @@ import (
 	"context"
 
 	v1 "github.com/acorn-io/acorn/pkg/apis/acorn.io/v1"
+	"github.com/acorn-io/acorn/pkg/dns"
 	"github.com/acorn-io/acorn/pkg/k8sclient"
 	"github.com/acorn-io/acorn/pkg/scheme"
 	"github.com/acorn-io/baaah"
@@ -22,7 +23,7 @@ type Controller struct {
 	apply  apply.Apply
 }
 
-func New() (*Controller, error) {
+func New(ctx context.Context) (*Controller, error) {
 	router, err := baaah.DefaultRouter(scheme.Scheme)
 	if err != nil {
 		return nil, err
@@ -40,6 +41,10 @@ func New() (*Controller, error) {
 
 	apply, err := apply.NewForConfig(cfg)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := dns.InitializeDomain(ctx, client); err != nil {
 		return nil, err
 	}
 

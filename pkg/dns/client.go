@@ -1,4 +1,4 @@
-package adnsclient
+package dns
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -45,14 +46,40 @@ type Response struct {
 
 type Client interface {
 	CreateDomain(namespace string) (string, string, error)
+	ReserveDomain() (string, string, error)
 }
 
-type client struct {
+type dnsClient struct {
 	endpoint string
 	c        *http.Client
 }
 
-func (c *client) CreateDomain(namespace string) (string, string, error) {
+func (c *dnsClient) ReserveDomain() (string, string, error) {
+	options := &DomainOpts{}
+
+	url := buildURL(c.endpoint, "domains")
+	body, err := jsonBody(options)
+	if err != nil {
+		return "", "", err
+	}
+
+	req, err := c.request(http.MethodPost, url, body)
+	if err != nil {
+		return "", "", errors.Wrap(err, "CreateDomain: failed to build a request")
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return "", "", errors.Wrap(err, "CreateDomain: failed to execute a request")
+	}
+	domain := resp.Data.Fqdn
+	if !strings.HasPrefix(domain, ".") {
+		domain = "." + domain
+	}
+	return domain, resp.Token, err
+}
+
+func (c *dnsClient) CreateDomain(namespace string) (string, string, error) {
 	options := &DomainOpts{
 		Namespace: namespace,
 	}
@@ -81,7 +108,7 @@ func buildURL(base, path string) string {
 	return fmt.Sprintf("%s/%s", base, path)
 }
 
-func (c *client) request(method string, url string, body io.Reader) (*http.Request, error) {
+func (c *dnsClient) request(method string, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
@@ -91,7 +118,7 @@ func (c *client) request(method string, url string, body io.Reader) (*http.Reque
 	return req, nil
 }
 
-func (c *client) do(req *http.Request) (Response, error) {
+func (c *dnsClient) do(req *http.Request) (Response, error) {
 	var data Response
 	resp, err := c.c.Do(req)
 	if err != nil {
@@ -129,7 +156,7 @@ func jsonBody(payload interface{}) (io.Reader, error) {
 }
 
 func NewClient(endpoint string) Client {
-	return &client{
+	return &dnsClient{
 		endpoint: endpoint,
 		c:        http.DefaultClient,
 	}

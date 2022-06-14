@@ -1,8 +1,8 @@
 package cli
 
 import (
-	"github.com/acorn-io/acorn/pkg/controller"
 	cli "github.com/acorn-io/acorn/pkg/cli/builder"
+	"github.com/acorn-io/acorn/pkg/controller"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,7 @@ type Controller struct {
 }
 
 func (s *Controller) Run(cmd *cobra.Command, args []string) error {
-	c, err := controller.New()
+	c, err := controller.New(cmd.Context())
 	if err != nil {
 		return err
 	}
