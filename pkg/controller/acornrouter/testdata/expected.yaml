@@ -63,6 +63,7 @@ spec:
                 - NET_ADMIN
 
 ---
+# this is example of how exposing an acorn as a service in the k8s. key to composition
 kind: Service
 apiVersion: v1
 metadata:

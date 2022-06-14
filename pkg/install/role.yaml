@@ -41,6 +41,10 @@ rules:
     resources:
       - deployments
       - daemonsets
+  - verbs: ["*"]
+    apiGroups: ["cert-manager.io"]
+    resources:
+      - certificates
 
 ---
 kind: ClusterRoleBinding

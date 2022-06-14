@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	v1 "github.com/acorn-io/acorn/pkg/apis/acorn.io/v1"
+	apiv1 "github.com/acorn-io/acorn/pkg/apis/api.acorn.io/v1"
 	"github.com/acorn-io/acorn/pkg/config"
 	"github.com/acorn-io/acorn/pkg/labels"
 	"github.com/acorn-io/acorn/pkg/system"
@@ -136,13 +137,12 @@ func rule(host, serviceName string, port int32) networkingv1.IngressRule {
 	}
 }
 
-func toPrefix(containerName string, appInstance *v1.AppInstance) string {
-	hostPrefix := containerName + "." + appInstance.Name
-	if containerName == "default" {
-		hostPrefix = appInstance.Name
-	}
-	if appInstance.Namespace != system.DefaultUserNamespace {
-		hostPrefix += "." + appInstance.Namespace
+func toPrefix(containerName, clusterFriendlyName string, appInstance *v1.AppInstance) string {
+	hostPrefix := containerName + "-" + appInstance.Name
+	if appInstance.Namespace == system.DefaultUserNamespace {
+		hostPrefix = hostPrefix + "." + clusterFriendlyName
+	} else {
+		hostPrefix = hostPrefix + "." + appInstance.Namespace + "-" + clusterFriendlyName
 	}
 	return hostPrefix
 }
@@ -169,6 +169,7 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 		return err
 	}
 
+	var friendlyClusterName string
 	for _, entry := range typed.Sorted(appInstance.Status.AppSpec.Containers) {
 		containerName := entry.Key
 		httpPorts := map[int]v1.Port{}
@@ -196,8 +197,6 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 			continue
 		}
 
-		hostPrefix := toPrefix(containerName, appInstance)
-
 		defaultPort, ok := httpPorts[80]
 		if !ok {
 			defaultPort = httpPorts[typed.SortedKeys(httpPorts)[0]]
@@ -216,6 +215,14 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 		}
 
 		addClusterDomains := len(hosts) == 0
+		if addClusterDomains && friendlyClusterName == "" {
+			friendlyClusterName, err = reserveFriendlyClusterName(cfg, req)
+			if err != nil {
+				return err
+			}
+		}
+
+		hostPrefix := toPrefix(containerName, friendlyClusterName, appInstance)
 
 		for _, domain := range cfg.ClusterDomains {
 			if addClusterDomains {
@@ -223,7 +230,7 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 			}
 			rules = append(rules, rule(hostPrefix+domain, containerName, defaultPort.Port))
 			for _, alias := range entry.Value.Aliases {
-				aliasPrefix := toPrefix(alias.Name, appInstance)
+				aliasPrefix := toPrefix(alias.Name, friendlyClusterName, appInstance)
 				if addClusterDomains {
 					hosts = append(hosts, aliasPrefix+domain)
 				}
@@ -274,4 +281,9 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 	}
 
 	return nil
+}
+
+func reserveFriendlyClusterName(cfg *apiv1.Config, req router.Request) (string, error) {
+	return "lucky-chucky", nil
+
 }

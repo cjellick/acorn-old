@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ClusterDomainDefault = ".local.on-acorn.io"
+	ClusterDomainPublic = ".on-acorn.io" // ah here it is
 )
 
 func complete(c *apiv1.Config) {
@@ -31,7 +31,7 @@ func complete(c *apiv1.Config) {
 		c.PodSecurityEnforceProfile = "baseline"
 	}
 	if len(c.ClusterDomains) == 0 {
-		c.ClusterDomains = []string{ClusterDomainDefault}
+		c.ClusterDomains = []string{ClusterDomainPublic}
 	}
 }
 
