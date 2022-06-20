@@ -9,9 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -19,6 +16,7 @@ const (
 	jsonContentType = "application/json"
 )
 
+// TODO These request and response objects all need refactored and cleaned up
 type DomainOpts struct {
 	Namespace string              `json:"namespace"`
 	Fqdn      string              `json:"fqdn"`
@@ -29,7 +27,7 @@ type DomainOpts struct {
 }
 
 type Domain struct {
-	Fqdn       string              `json:"fqdn,omitempty"`
+	Domain     string              `json:"domain,omitempty"`
 	Hosts      []string            `json:"hosts,omitempty"`
 	SubDomain  map[string][]string `json:"subdomain,omitempty"`
 	Text       string              `json:"text,omitempty"`
@@ -44,14 +42,59 @@ type Response struct {
 	Token   string `json:"token"`
 }
 
+type RecordInput struct {
+	Name   string   `json:"name"`
+	Type   string   `json:"type"`
+	Values []string `json:"values"`
+}
+
+type RecordOutput struct {
+	RecordInput
+	FQDN string `json:"fqdn"`
+}
+
+type RecordResponse struct {
+	Status  int          `json:"status"`
+	Message string       `json:"msg"`
+	Data    RecordOutput `json:"data,omitempty"`
+}
+
 type Client interface {
-	CreateDomain(namespace string) (string, string, error)
 	ReserveDomain() (string, string, error)
+	CreateRecord(domain, token, subdomainFQDN, rType string, values []string) error
 }
 
 type dnsClient struct {
 	endpoint string
 	c        *http.Client
+}
+
+func (c *dnsClient) CreateRecord(domain, token, subdomainFQDN, rType string, values []string) error {
+	input := &RecordInput{
+		Name:   strings.TrimSuffix(subdomainFQDN, domain),
+		Type:   rType,
+		Values: values,
+	}
+
+	url := buildRecordsURL(c.endpoint, domain)
+	body, err := jsonBody(input)
+	if err != nil {
+		return err
+	}
+
+	req, err := c.request(http.MethodPost, url, body)
+	if err != nil {
+		return err
+	}
+
+	bearer := "Bearer " + token
+	req.Header.Add("Authorization", bearer)
+
+	err = c.do(req, &RecordResponse{})
+	if err != nil {
+		return fmt.Errorf("failed to execute createRecord request, error: %v", err)
+	}
+	return nil
 }
 
 func (c *dnsClient) ReserveDomain() (string, string, error) {
@@ -65,47 +108,29 @@ func (c *dnsClient) ReserveDomain() (string, string, error) {
 
 	req, err := c.request(http.MethodPost, url, body)
 	if err != nil {
-		return "", "", errors.Wrap(err, "CreateDomain: failed to build a request")
+		return "", "", err
 	}
 
-	resp, err := c.do(req)
+	resp := &Response{}
+	err = c.do(req, resp)
 	if err != nil {
-		return "", "", errors.Wrap(err, "CreateDomain: failed to execute a request")
+		return "", "", fmt.Errorf("failed to reserve domain, error: %v", err)
 	}
-	domain := resp.Data.Fqdn
+
+	domain := resp.Data.Domain
 	if !strings.HasPrefix(domain, ".") {
 		domain = "." + domain
 	}
 	return domain, resp.Token, err
 }
 
-func (c *dnsClient) CreateDomain(namespace string) (string, string, error) {
-	options := &DomainOpts{
-		Namespace: namespace,
-	}
-
-	url := buildURL(c.endpoint, "domains")
-	body, err := jsonBody(options)
-	if err != nil {
-		return "", "", err
-	}
-
-	req, err := c.request(http.MethodPost, url, body)
-	if err != nil {
-		return "", "", errors.Wrap(err, "CreateDomain: failed to build a request")
-	}
-
-	resp, err := c.do(req)
-	if err != nil {
-		return "", "", errors.Wrap(err, "CreateDomain: failed to execute a request")
-	}
-
-	return resp.Data.Fqdn, resp.Token, err
-}
-
-//buildUrl return request url
 func buildURL(base, path string) string {
 	return fmt.Sprintf("%s/%s", base, path)
+}
+
+func buildRecordsURL(base, domain string) string {
+	domain = strings.TrimPrefix(domain, ".")
+	return fmt.Sprintf("%s/domains/%s/records", base, domain)
 }
 
 func (c *dnsClient) request(method string, url string, body io.Reader) (*http.Request, error) {
@@ -118,32 +143,28 @@ func (c *dnsClient) request(method string, url string, body io.Reader) (*http.Re
 	return req, nil
 }
 
-func (c *dnsClient) do(req *http.Request) (Response, error) {
-	var data Response
+func (c *dnsClient) do(req *http.Request, responseBody interface{}) error {
 	resp, err := c.c.Do(req)
 	if err != nil {
-		return data, err
+		return err
 	}
 	// when err is nil, resp contains a non-nil resp.Body which must be closed
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return data, errors.Wrap(err, "read Response body error")
+		return fmt.Errorf("failed to read response body, error: %v", err)
 	}
 
-	err = json.Unmarshal(body, &data)
+	err = json.Unmarshal(body, responseBody)
 	if err != nil {
-		return data, errors.Wrapf(err, "decode Response error: %s", string(body))
+		return fmt.Errorf("failed to unmarshal response body (%v), error: %v", string(body), err)
 	}
-	logrus.Debugf("got Response entry: %+v", data)
 	if code := resp.StatusCode; code < 200 || code > 300 {
-		if data.Message != "" {
-			return data, errors.Errorf("got request error: %s", data.Message)
-		}
+		return fmt.Errorf("unexpected response status code: %v", code)
 	}
 
-	return data, nil
+	return nil
 }
 
 func jsonBody(payload interface{}) (io.Reader, error) {

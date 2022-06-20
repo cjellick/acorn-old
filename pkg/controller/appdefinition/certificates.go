@@ -7,7 +7,6 @@ import (
 	"github.com/acorn-io/acorn/pkg/labels"
 	"github.com/acorn-io/baaah/pkg/router"
 	v1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,7 +26,6 @@ func addCertificates(appInstance *apiv1.AppInstance, req router.Request, resp ro
 			IPAddresses: []string{"192.168.1.20"},
 		},
 	}
-	logrus.Info(c)
 	resp.Objects(
 		c,
 	)

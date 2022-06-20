@@ -13,10 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	acornDNSConfigMapName = "acorn-dns"
-)
-
 func InitializeDomain(ctx context.Context, c client.Client) error {
 	cfg, err := config.Get(ctx, c)
 	if err != nil {
@@ -29,7 +25,7 @@ func InitializeDomain(ctx context.Context, c client.Client) error {
 	}
 
 	cm := &corev1.ConfigMap{}
-	err = c.Get(ctx, router.Key(system.Namespace, acornDNSConfigMapName), cm)
+	err = c.Get(ctx, router.Key(system.Namespace, system.DNSConfigName), cm)
 	if err != nil && !apierror.IsNotFound(err) {
 		return err
 	} else if apierror.IsNotFound(err) {
@@ -41,7 +37,7 @@ func InitializeDomain(ctx context.Context, c client.Client) error {
 
 		err = c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      acornDNSConfigMapName,
+				Name:      system.DNSConfigName,
 				Namespace: system.Namespace,
 				Labels: map[string]string{
 					labels.AcornManaged: "true",

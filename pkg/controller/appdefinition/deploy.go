@@ -19,7 +19,6 @@ import (
 	"github.com/acorn-io/baaah/pkg/typed"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/rancher/wrangler/pkg/data/convert"
-	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierror "k8s.io/apimachinery/pkg/api/errors"
@@ -70,7 +69,6 @@ func DeploySpec(req router.Request, resp router.Response) (err error) {
 	if err := addIngress(appInstance, req, resp); err != nil {
 		return err
 	}
-	logrus.Info("Hmph")
 	if err := addCertificates(appInstance, req, resp); err != nil {
 		return err
 	}
