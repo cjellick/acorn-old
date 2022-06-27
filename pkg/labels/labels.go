@@ -26,6 +26,7 @@ const (
 	AcornAlias           = "alias." + Prefix
 	AcornCredential      = Prefix + "credential"
 	AcornPullSecret      = Prefix + "pull-secret"
+	AcornDNSHash         = Prefix + "dns-hash"
 	AcornSecretRevPrefix = "secret-rev." + Prefix
 	AcornRootNamespace   = Prefix + "root-namespace"
 	AcornRootPrefix      = Prefix + "root-prefix"

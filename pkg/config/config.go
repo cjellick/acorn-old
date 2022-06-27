@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	apiv1 "github.com/acorn-io/acorn/pkg/apis/api.acorn.io/v1"
 	v1 "github.com/acorn-io/acorn/pkg/apis/internal.acorn.io/v1"
@@ -15,10 +16,11 @@ import (
 )
 
 var (
-	ClusterDomainDefault = ".local.on-acorn.io"
+	ClusterDomainDefault    = ".local.on-acorn.io"
+	AcornDNSEndpointDefault = "https://dns.acrn.io/v1"
 )
 
-func complete(c *apiv1.Config) {
+func complete(c *apiv1.Config, ctx context.Context, getter kclient.Reader) error {
 	if c.TLSEnabled == nil {
 		c.TLSEnabled = new(bool)
 	}
@@ -31,9 +33,54 @@ func complete(c *apiv1.Config) {
 	if c.PodSecurityEnforceProfile == "" && *c.SetPodSecurityEnforceProfile {
 		c.PodSecurityEnforceProfile = "baseline"
 	}
-	if len(c.ClusterDomains) == 0 {
-		c.ClusterDomains = []string{ClusterDomainDefault}
+	if c.AcornDNS == nil {
+		c.AcornDNS = &[]string{"auto"}[0]
 	}
+	if c.AcornDNSEndpoint == nil {
+		c.AcornDNSEndpoint = &AcornDNSEndpointDefault
+	}
+
+	if strings.EqualFold(*c.AcornDNS, "enabled") || (len(c.ClusterDomains) == 0 && strings.EqualFold(*c.AcornDNS, "auto")) {
+		local, err := useLocal(ctx, getter)
+		if err != nil {
+			return err
+		}
+		if local {
+			c.ClusterDomains = append(c.ClusterDomains, ClusterDomainDefault)
+			return nil
+		}
+
+		dnsSecret := &corev1.Secret{}
+		err = getter.Get(ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
+		if err != nil {
+			if !apierror.IsNotFound(err) {
+				return err
+			}
+			return nil
+		}
+		domain := string(dnsSecret.Data["domain"])
+		if domain != "" {
+			c.ClusterDomains = append(c.ClusterDomains, domain)
+		}
+	}
+	return nil
+}
+
+func useLocal(ctx context.Context, getter kclient.Reader) (bool, error) {
+	var nodes corev1.NodeList
+	if err := getter.List(ctx, &nodes); err != nil {
+		return false, err
+	}
+
+	if len(nodes.Items) == 1 {
+		node := nodes.Items[0]
+		if strings.Contains(node.Name, "rancher-desktop") || strings.Contains(node.Status.NodeInfo.OSImage, "Rancher Desktop") ||
+			node.Name == "docker-desktop" || strings.Contains(node.Name, "minikube") {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func merge(oldConfig, newConfig *apiv1.Config) *apiv1.Config {
@@ -69,6 +116,12 @@ func merge(oldConfig, newConfig *apiv1.Config) *apiv1.Config {
 		mergedConfig.PublishProtocolsByDefault = nil
 	} else if len(newConfig.PublishProtocolsByDefault) > 0 {
 		mergedConfig.PublishProtocolsByDefault = newConfig.PublishProtocolsByDefault
+	}
+	if newConfig.AcornDNS != nil {
+		mergedConfig.AcornDNS = newConfig.AcornDNS
+	}
+	if newConfig.AcornDNSEndpoint != nil {
+		mergedConfig.AcornDNSEndpoint = newConfig.AcornDNSEndpoint
 	}
 
 	return &mergedConfig
@@ -162,6 +215,6 @@ func Get(ctx context.Context, getter kclient.Reader) (*apiv1.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	complete(cfg)
-	return cfg, nil
+	err = complete(cfg, ctx, getter)
+	return cfg, err
 }

@@ -662,8 +662,20 @@ func schema_pkg_apis_apiacornio_v1_Config(ref common.ReferenceCallback) common.O
 							},
 						},
 					},
+					"acornDNS": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"acornDNSEndpoint": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
-				Required: []string{"ingressClassName", "clusterDomains", "tlsEnabled", "setPodSecurityEnforceProfile", "podSecurityEnforceProfile", "publishProtocolsByDefault"},
+				Required: []string{"ingressClassName", "clusterDomains", "tlsEnabled", "setPodSecurityEnforceProfile", "podSecurityEnforceProfile", "publishProtocolsByDefault", "acornDNS", "acornDNSEndpoint"},
 			},
 		},
 	}
