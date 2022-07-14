@@ -1,8 +1,6 @@
 package ingress
 
 import (
-	"strings"
-
 	"github.com/acorn-io/acorn/pkg/config"
 	"github.com/acorn-io/acorn/pkg/dns"
 	"github.com/acorn-io/acorn/pkg/labels"
@@ -12,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/utils/strings/slices"
 )
 
 func RequireLBs(h router.Handler) router.Handler {
@@ -31,15 +30,11 @@ func SetDNS(req router.Request, resp router.Response) error {
 		return err
 	}
 
-	if strings.EqualFold(*cfg.AcornDNS, "disabled") {
-		logrus.Debugf("Acorn DNS is set to off, not attempting DNS RenewAndSync")
-		return nil
-	}
-
 	secret := &corev1.Secret{}
 	if err := req.Client.Get(req.Ctx, router.Key(system.Namespace, system.DNSSecretName), secret); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil // Config doesn't exist. Nothing we can do here.
+			// DNS Secret doesn't exist. Nothing to do
+			return nil
 		}
 		return err
 	}
@@ -51,27 +46,33 @@ func SetDNS(req router.Request, resp router.Response) error {
 	}
 
 	ingress := req.Object.(*netv1.Ingress)
-	requests, hash := dns.ToRecordRequestsAndHash(domain, ingress)
-	if len(requests) == 0 {
-		return nil
+	var hash string
+	var requests []dns.RecordRequest
+	if slices.Contains(cfg.ClusterDomains, domain) {
+		requests, hash = dns.ToRecordRequestsAndHash(domain, ingress)
+		if len(requests) == 0 {
+			return nil
+		}
+
+		if hash == ingress.Annotations[labels.AcornDNSHash] {
+			// If the hashes are the same, we've already made all the appropriate DNS entries for this ingress.
+			return nil
+		}
+
+		dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, token)
+		if err := dnsClient.CreateRecords(domain, requests); err != nil {
+			return err
+		}
 	}
 
-	if hash == ingress.Annotations[labels.AcornDNSHash] {
-		// If the hashes are the same, we've already made all the appropriate DNS entries for this ingress.
-		return nil
+	if hash != ingress.Annotations[labels.AcornDNSHash] {
+		ingress.Annotations[labels.AcornDNSHash] = hash
+		err = req.Client.Update(req.Ctx, ingress)
+		if err != nil {
+			return err
+		}
+		resp.Objects(ingress)
 	}
 
-	dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, token)
-	if err := dnsClient.CreateRecords(domain, requests); err != nil {
-		return err
-	}
-
-	ingress.Annotations[labels.AcornDNSHash] = hash
-	err = req.Client.Update(req.Ctx, ingress)
-	if err != nil {
-		return err
-	}
-
-	resp.Objects(ingress)
 	return nil
 }
