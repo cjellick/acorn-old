@@ -40,16 +40,14 @@ func complete(c *apiv1.Config, ctx context.Context, getter kclient.Reader) error
 		c.AcornDNSEndpoint = &AcornDNSEndpointDefault
 	}
 
-	if strings.EqualFold(*c.AcornDNS, "enabled") || (len(c.ClusterDomains) == 0 && strings.EqualFold(*c.AcornDNS, "auto")) {
-		local, err := useLocal(ctx, getter)
-		if err != nil {
-			return err
-		}
-		if local {
-			c.ClusterDomains = append(c.ClusterDomains, ClusterDomainDefault)
-			return nil
-		}
+	useLocal, err := useLocalWildcardDomain(ctx, getter)
+	if err != nil {
+		return err
+	}
 
+	// Acorn DNS should be used if it is explicitly "enabled" or if it is in "auto" mode and the user hasn't set a
+	//cluster domain and the cluster doesn't qualify for using the localhost wildcard domain
+	if strings.EqualFold(*c.AcornDNS, "enabled") || (strings.EqualFold(*c.AcornDNS, "auto") && len(c.ClusterDomains) == 0 && !useLocal) {
 		dnsSecret := &corev1.Secret{}
 		err = getter.Get(ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
 		if err != nil {
@@ -63,10 +61,17 @@ func complete(c *apiv1.Config, ctx context.Context, getter kclient.Reader) error
 			c.ClusterDomains = append(c.ClusterDomains, domain)
 		}
 	}
+
+	// If a clusterDomain hasn't been set yet, use the localhost wildcard domain
+	if len(c.ClusterDomains) == 0 {
+		c.ClusterDomains = []string{ClusterDomainDefault}
+	}
 	return nil
 }
 
-func useLocal(ctx context.Context, getter kclient.Reader) (bool, error) {
+// If the cluster is a known desktop cluster type such as minikube, Rancher Desktop, or Docker Desktop, then we don't
+// want to create real DNS records. Rather, use our wildcard domain that resolves to 127.0.0.1
+func useLocalWildcardDomain(ctx context.Context, getter kclient.Reader) (bool, error) {
 	var nodes corev1.NodeList
 	if err := getter.List(ctx, &nodes); err != nil {
 		return false, err
