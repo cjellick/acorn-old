@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	apiv1 "github.com/acorn-io/acorn/pkg/apis/api.acorn.io/v1"
 	v1 "github.com/acorn-io/acorn/pkg/apis/internal.acorn.io/v1"
 	"github.com/acorn-io/acorn/pkg/config"
 	"github.com/acorn-io/acorn/pkg/dns"
@@ -20,7 +19,6 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -241,7 +239,7 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 
 		// If the ingress already exists and if we are dropping an Acorn DNS host name, make
 		// a call to Acorn DNS to delete that record.
-		if err := cleanupAcornDNSEntries(appInstance, req, containerName, hosts, cfg); err != nil {
+		if err := dns.CleanupAcornDNSEntries(appInstance, req, containerName, hosts, cfg); err != nil {
 			return nil
 		}
 
@@ -265,49 +263,5 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 		})
 	}
 
-	return nil
-}
-
-func cleanupAcornDNSEntries(appInstance *v1.AppInstance, req router.Request, containerName string, newHosts []string, cfg *apiv1.Config) error {
-	existingIngress := networkingv1.Ingress{}
-	err := req.Get(&existingIngress, appInstance.Status.Namespace, containerName)
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return err
-		}
-		return nil
-	}
-
-	oldHosts := strings.Split(existingIngress.Annotations[labels.AcornHostnames], ",")
-	if len(oldHosts) > 0 {
-		oldHostMap := make(map[string]bool)
-		for _, h := range oldHosts {
-			oldHostMap[h] = true
-		}
-		for _, h := range newHosts {
-			delete(oldHostMap, h)
-		}
-		if len(oldHostMap) > 0 {
-			secret := &corev1.Secret{}
-			if err := req.Client.Get(req.Ctx, router.Key(system.Namespace, system.DNSSecretName), secret); err != nil {
-				if apierrors.IsNotFound(err) {
-					return nil
-				}
-				return err
-			}
-			domain := string(secret.Data["domain"])
-			token := string(secret.Data["token"])
-			if domain != "" && token != "" {
-				for h := range oldHostMap {
-					if strings.HasSuffix(h, domain) {
-						dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, token)
-						if err := dnsClient.DeleteRecord(domain, strings.TrimSuffix(h, domain)); err != nil {
-							logrus.Warnf("Encountered an error attempting to cleanup DNS entry %v. This will not be retried. Record will eventually be cleaned up due to aging out. Error: %v", h, err)
-						}
-					}
-				}
-			}
-		}
-	}
 	return nil
 }
