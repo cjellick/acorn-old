@@ -145,7 +145,9 @@ func toPrefix(containerName string, appInstance *v1.AppInstance) string {
 	if containerName == "default" {
 		hostPrefix = appInstance.Name
 	}
-	hostPrefix += "." + appInstance.Namespace
+	if appInstance.Namespace != system.DefaultUserNamespace {
+		hostPrefix += "." + appInstance.Namespace
+	}
 	return hostPrefix
 }
 
