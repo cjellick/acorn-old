@@ -115,6 +115,11 @@ func merge(oldConfig, newConfig *apiv1.Config) *apiv1.Config {
 	if len(newConfig.ClusterDomains) > 0 && newConfig.ClusterDomains[0] == "" {
 		mergedConfig.ClusterDomains = nil
 	} else if len(newConfig.ClusterDomains) > 0 {
+		for i, cd := range newConfig.ClusterDomains {
+			if !strings.HasPrefix(cd, ".") {
+				newConfig.ClusterDomains[i] = "." + cd
+			}
+		}
 		mergedConfig.ClusterDomains = newConfig.ClusterDomains
 	}
 	if len(newConfig.PublishProtocolsByDefault) > 0 && newConfig.PublishProtocolsByDefault[0] == "" {
