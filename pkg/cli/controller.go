@@ -20,7 +20,7 @@ type Controller struct {
 }
 
 func (s *Controller) Run(cmd *cobra.Command, args []string) error {
-	c, err := controller.New(cmd.Context())
+	c, err := controller.New()
 	if err != nil {
 		return err
 	}

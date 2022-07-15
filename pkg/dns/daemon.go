@@ -21,13 +21,11 @@ import (
 
 type Daemon struct {
 	client kclient.Client
-	ctx    context.Context
 }
 
-func NewDaemon(ctx context.Context, client kclient.Client) *Daemon {
+func NewDaemon(client kclient.Client) *Daemon {
 	return &Daemon{
 		client: client,
-		ctx:    ctx,
 	}
 }
 
@@ -43,15 +41,17 @@ func (d *Daemon) RenewAndSync(ctx context.Context) {
 		Factor:   2,
 		Steps:    10,
 		Cap:      300 * time.Second,
-	}, d.internal)
+	}, func() (done bool, err error) {
+		return d.internal(ctx)
+	})
 	if err != nil {
 		logrus.Errorf("Couldn't complete RenewAndSync: %v", err)
 	}
 }
 
-func (d *Daemon) internal() (bool, error) {
+func (d *Daemon) internal(ctx context.Context) (bool, error) {
 	logrus.Debugf("Renewing and syncing Acorn DNS")
-	cfg, err := config.Get(d.ctx, d.client)
+	cfg, err := config.Get(ctx, d.client)
 	if err != nil {
 		logrus.Errorf("Failed to get config: %v", err)
 		return false, nil
@@ -63,7 +63,7 @@ func (d *Daemon) internal() (bool, error) {
 	}
 
 	dnsSecret := &corev1.Secret{}
-	err = d.client.Get(d.ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
+	err = d.client.Get(ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logrus.Infof("DNS secret %v/%v not found, not proceeding with DNS renewal", system.Namespace, system.DNSSecretName)
@@ -81,7 +81,7 @@ func (d *Daemon) internal() (bool, error) {
 	}
 
 	var ingresses netv1.IngressList
-	err = d.client.List(d.ctx, &ingresses, &kclient.ListOptions{
+	err = d.client.List(ctx, &ingresses, &kclient.ListOptions{
 		LabelSelector: klabels.SelectorFromSet(map[string]string{
 			labels.AcornManaged: "true",
 		}),
@@ -112,7 +112,7 @@ func (d *Daemon) internal() (bool, error) {
 		i, ok := ingressMap[outOfSync]
 		if ok {
 			delete(i.Annotations, labels.AcornDNSHash)
-			err = d.client.Update(d.ctx, &i)
+			err = d.client.Update(ctx, &i)
 			if err != nil {
 				logrus.Errorf("Problem updating ingress %v: %v", i.Name, err)
 				return false, nil

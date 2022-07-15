@@ -29,7 +29,7 @@ type Controller struct {
 	apply  apply.Apply
 }
 
-func New(ctx context.Context) (*Controller, error) {
+func New() (*Controller, error) {
 	router, err := baaah.DefaultRouter(scheme.Scheme)
 	if err != nil {
 		return nil, err
@@ -46,9 +46,6 @@ func New(ctx context.Context) (*Controller, error) {
 	}
 
 	apply := apply.New(client)
-
-	dnsInit := dns.NewDaemon(ctx, client)
-	go wait.UntilWithContext(ctx, dnsInit.RenewAndSync, dnsRenewPeriodHours)
 
 	routes(router)
 
@@ -67,5 +64,9 @@ func (c *Controller) Start(ctx context.Context) error {
 	if err := c.initData(ctx); err != nil {
 		return err
 	}
+
+	dnsInit := dns.NewDaemon(c.client)
+	go wait.UntilWithContext(ctx, dnsInit.RenewAndSync, dnsRenewPeriodHours)
+
 	return c.Router.Start(ctx)
 }
