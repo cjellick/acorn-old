@@ -31,6 +31,7 @@ const (
 	AcornRootNamespace   = Prefix + "root-namespace"
 	AcornRootPrefix      = Prefix + "root-prefix"
 	AcornPublishURL      = Prefix + "publish-url"
+	AcornDNSState        = Prefix + "applied-dns-state"
 )
 
 func RootPrefix(parentLabels map[string]string, name string) string {

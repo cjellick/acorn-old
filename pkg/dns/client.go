@@ -27,6 +27,9 @@ type Client interface {
 
 	// DeleteRecord calls AcornDNS to delete the record(s) associated with the supplied fqdn
 	DeleteRecord(domain, fqdn, token string) error
+
+	// PurgeRecords calls AcornDNS to purge all records for the given domain, but doesn't delete the domain itself
+	PurgeRecords(domain, token string) error
 }
 
 // AuthFailedNoDomainError indicates that a request failed authentication because the domain was not found. If encountered,
@@ -123,6 +126,21 @@ func (c *client) DeleteRecord(domain, prefix, token string) error {
 	url := fmt.Sprintf("%v/domains/%v/records/%v", c.endpoint, domain, prefix)
 
 	req, err := c.request(http.MethodDelete, url, nil, token)
+	if err != nil {
+		return err
+	}
+
+	err = c.do(req, nil)
+	if err != nil {
+		return fmt.Errorf("failed to execute delete request, error: %w", err)
+	}
+	return nil
+}
+
+func (c *client) PurgeRecords(domain, token string) error {
+	url := fmt.Sprintf("%v/domains/%v/purgerecords", c.endpoint, domain)
+
+	req, err := c.request(http.MethodPost, url, nil, token)
 	if err != nil {
 		return err
 	}

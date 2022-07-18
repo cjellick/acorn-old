@@ -21,25 +21,34 @@ func SetupDNS(req router.Request, resp router.Response) error {
 		return err
 	}
 
-	if strings.EqualFold(*cfg.AcornDNS, "disabled") {
-		logrus.Debugf("Acorn DNS is disabled, not initializing an Acorn DNS domain")
-		return nil
-	}
-
 	dnsSecret := &corev1.Secret{}
 	err = req.Client.Get(req.Ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-
 	domain := string(dnsSecret.Data["domain"])
 	token := string(dnsSecret.Data["token"])
 
-	if domain == "" || token == "" {
+	dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint)
+
+	// If we are changing from an enabled state to the disabled state, tell the AcornDNS to purge all records for this domain
+	if strings.EqualFold(*cfg.AcornDNS, "disabled") && dnsSecret.Annotations[labels.AcornDNSState] != "disabled" {
+		if domain != "" && token != "" {
+			if err := dnsClient.PurgeRecords(domain, token); err != nil {
+				if dns.IsDomainAuthError(err) {
+					if err := dns.ClearDNSToken(req.Ctx, req.Client, dnsSecret); err != nil {
+						return err
+					}
+				}
+				return err
+			}
+		}
+	}
+
+	if domain == "" || token == "" && !strings.EqualFold(*cfg.AcornDNS, "disabled") {
 		if domain != "" {
 			logrus.Infof("Clearing AcornDNS domain  %v", domain)
 		}
-		dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, "")
 		domain, token, err = dnsClient.ReserveDomain()
 		if err != nil {
 			return fmt.Errorf("problem reserving domain: %w", err)
@@ -52,6 +61,9 @@ func SetupDNS(req router.Request, resp router.Response) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      system.DNSSecretName,
 			Namespace: system.Namespace,
+			Annotations: map[string]string{
+				labels.AcornDNSState: *cfg.AcornDNS,
+			},
 			Labels: map[string]string{
 				labels.AcornManaged: "true",
 			},
