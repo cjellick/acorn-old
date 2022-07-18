@@ -45,13 +45,17 @@ type RecordResponse struct {
 	FQDN string `json:"fqdn,omitempty"`
 }
 
-type ErrorResponse struct {
-	Status  int         `json:"status,omitempty"`
-	Message string      `json:"msg,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-}
-
 type FQDNTypePair struct {
 	FQDN string `json:"fqdn,omitempty"`
 	Type string `json:"type,omitempty"`
+}
+
+type AuthErrorResponse struct {
+	Status  int           `json:"status,omitempty"`
+	Message string        `json:"msg,omitempty"`
+	Data    authErrorData `json:"data,omitempty"`
+}
+
+type authErrorData struct {
+	NoDomain bool `json:"noDomain,omitempty"`
 }

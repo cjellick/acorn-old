@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"sort"
@@ -8,7 +9,9 @@ import (
 
 	"github.com/acorn-io/acorn/pkg/labels"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/networking/v1"
+	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func ToRecordRequestsAndHash(domain string, ingress *v1.Ingress) ([]RecordRequest, string) {
@@ -81,4 +84,11 @@ func generateHash(hosts, ips []string, recordType string) string {
 	dig := sha1.New()
 	dig.Write([]byte(toHash))
 	return hex.EncodeToString(dig.Sum(nil))
+}
+
+// ClearDNSToken deletes the token used to authenticate to the AcornDNS service.
+func ClearDNSToken(ctx context.Context, client kclient.Client, dnsSecret *corev1.Secret) error {
+	logrus.Infof("Clearing token for domain %s", dnsSecret.Data["domain"])
+	delete(dnsSecret.Data, "token")
+	return client.Update(ctx, dnsSecret)
 }

@@ -16,10 +16,6 @@ import (
 )
 
 func SetupDNS(req router.Request, resp router.Response) error {
-	// This could be a bit more robust to handle the scenario where the the reserved domain has aged out on the DNS
-	// side because the cluster hasn't checked in in 30 days. We would have to delete the secret and reserve a new domain
-	// in that case. But I want to wait until we see how this is used before implementing that.
-
 	cfg, err := config.Get(req.Ctx, req.Client)
 	if err != nil {
 		return err
@@ -32,18 +28,27 @@ func SetupDNS(req router.Request, resp router.Response) error {
 
 	dnsSecret := &corev1.Secret{}
 	err = req.Client.Get(req.Ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
-	if !apierrors.IsNotFound(err) {
-		// Either err is nil because we found the secret, or we hit some error other than it not existing. Return
+	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, "")
-	domain, token, err := dnsClient.ReserveDomain()
-	if err != nil {
-		return fmt.Errorf("problem reserving domain: %v", err)
+	domain := string(dnsSecret.Data["domain"])
+	token := string(dnsSecret.Data["token"])
+
+	if domain == "" || token == "" {
+		if domain != "" {
+			logrus.Infof("Clearing AcornDNS domain  %v", domain)
+		}
+		dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, "")
+		domain, token, err = dnsClient.ReserveDomain()
+		if err != nil {
+			return fmt.Errorf("problem reserving domain: %w", err)
+		}
+
+		logrus.Infof("Obtained AcornDNS domain: %v", domain)
 	}
 
-	err = req.Client.Create(req.Ctx, &corev1.Secret{
+	resp.Objects(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      system.DNSSecretName,
 			Namespace: system.Namespace,
@@ -53,10 +58,6 @@ func SetupDNS(req router.Request, resp router.Response) error {
 		},
 		Data: map[string][]byte{"domain": []byte(domain), "token": []byte(token)},
 	})
-	if err != nil {
-		return fmt.Errorf("problem persisting domain %v as secret %v/%v: %v", domain, system.Namespace, system.DNSSecretName, err)
-	}
 
-	logrus.Infof("Reserved domain: %v", domain)
 	return nil
 }

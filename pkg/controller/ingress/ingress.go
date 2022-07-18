@@ -41,7 +41,7 @@ func SetDNS(req router.Request, resp router.Response) error {
 	domain := string(secret.Data["domain"])
 	token := string(secret.Data["token"])
 	if domain == "" || token == "" {
-		logrus.Warnf("DNS secret doesn't have expected entries. Domain: %v.", domain)
+		logrus.Infof("DNS secret missing domain (%v) or token. Won't requeset AcornDNS FQDN.", domain)
 		return nil
 	}
 
@@ -61,6 +61,11 @@ func SetDNS(req router.Request, resp router.Response) error {
 
 		dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint, token)
 		if err := dnsClient.CreateRecords(domain, requests); err != nil {
+			if dns.IsDomainAuthError(err) {
+				if err := dns.ClearDNSToken(req.Ctx, req.Client, secret); err != nil {
+					return err
+				}
+			}
 			return err
 		}
 	}

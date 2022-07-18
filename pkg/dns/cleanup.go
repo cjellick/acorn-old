@@ -48,6 +48,11 @@ func CleanupAcornDNSEntries(appInstance *v1.AppInstance, req router.Request, con
 					if strings.HasSuffix(h, domain) {
 						dnsClient := NewClient(*cfg.AcornDNSEndpoint, token)
 						if err := dnsClient.DeleteRecord(domain, strings.TrimSuffix(h, domain)); err != nil {
+							if IsDomainAuthError(err) {
+								if err := ClearDNSToken(req.Ctx, req.Client, secret); err != nil {
+									return err
+								}
+							}
 							logrus.Warnf("Encountered an error attempting to cleanup DNS entry %v. This will not be retried. Record will eventually be cleaned up due to aging out. Error: %v", h, err)
 						}
 					}

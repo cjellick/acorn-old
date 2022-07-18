@@ -2,7 +2,6 @@ package dns
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -29,7 +28,7 @@ func NewDaemon(client kclient.Client) *Daemon {
 	}
 }
 
-// RenewAndSync will renew the cluster's Acorn DNS domain and corresponding records.
+// RenewAndSync will renew the cluster's AcornDNS domain and corresponding records.
 // It sends each ingress's full record (fqdn, type, values). In addition to renewing the records, the DNS service will
 // return "out of sync" records that either don't exist or have different values on the DNS service side. This function
 // will cause the ingresses for such records to resync.
@@ -50,7 +49,6 @@ func (d *Daemon) RenewAndSync(ctx context.Context) {
 }
 
 func (d *Daemon) internal(ctx context.Context) (bool, error) {
-	logrus.Debugf("Renewing and syncing Acorn DNS")
 	cfg, err := config.Get(ctx, d.client)
 	if err != nil {
 		logrus.Errorf("Failed to get config: %v", err)
@@ -61,6 +59,8 @@ func (d *Daemon) internal(ctx context.Context) (bool, error) {
 		logrus.Debugf("Acorn DNS is disabled, not attempting DNS renewal")
 		return true, nil
 	}
+
+	logrus.Infof("Renewing and syncing AcornDNS")
 
 	dnsSecret := &corev1.Secret{}
 	err = d.client.Get(ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
@@ -77,7 +77,8 @@ func (d *Daemon) internal(ctx context.Context) (bool, error) {
 	domain = string(dnsSecret.Data["domain"])
 	token = string(dnsSecret.Data["token"])
 	if domain == "" || token == "" {
-		return false, fmt.Errorf("dns secret %v/%v exists but is missing domain or token. Aborting", system.Namespace, system.DNSSecretName)
+		logrus.Errorf("DNS secret %v/%v exists but is missing domain (%v) or token", system.Namespace, system.DNSSecretName, domain)
+		return false, nil
 	}
 
 	var ingresses netv1.IngressList
@@ -104,7 +105,12 @@ func (d *Daemon) internal(ctx context.Context) (bool, error) {
 	dnsClient := NewClient(*cfg.AcornDNSEndpoint, token)
 	response, err := dnsClient.Renew(domain, RenewRequest{Records: recordRequests})
 	if err != nil {
-		logrus.Errorf("Failed to call DNS renew API: %v", err)
+		if IsDomainAuthError(err) {
+			if err := ClearDNSToken(ctx, d.client, dnsSecret); err != nil {
+				logrus.Errorf("Failed to clear DNS token: %v", err)
+			}
+		}
+		logrus.Errorf("Failed to complete DNS renew call with error: %v", err)
 		return false, nil
 	}
 
