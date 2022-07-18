@@ -19,14 +19,14 @@ type Client interface {
 	ReserveDomain() (string, string, error)
 
 	// CreateRecords calls AcornDNS to create dns records based on the supplied RecordRequests for the specified domain
-	CreateRecords(domain string, records []RecordRequest) error
+	CreateRecords(domain, token string, records []RecordRequest) error
 
 	// Renew calls AcornDNS to renew the domain and the records specified in the renewRequest. The response will contain
 	// "out of sync" records, which are records that AcornDNS either doesn't know about or has different values for
-	Renew(domain string, renew RenewRequest) (RenewResponse, error)
+	Renew(domain, token string, renew RenewRequest) (RenewResponse, error)
 
 	// DeleteRecord calls AcornDNS to delete the record(s) associated with the supplied fqdn
-	DeleteRecord(domain, fqdn string) error
+	DeleteRecord(domain, fqdn, token string) error
 }
 
 // AuthFailedNoDomainError indicates that a request failed authentication because the domain was not found. If encountered,
@@ -44,21 +44,19 @@ func IsDomainAuthError(err error) bool {
 }
 
 // NewClient creates a new AcornDNS client
-func NewClient(endpoint, token string) Client {
+func NewClient(endpoint string) Client {
 	return &client{
 		endpoint: endpoint,
-		token:    token,
 		c:        http.DefaultClient,
 	}
 }
 
 type client struct {
 	endpoint string
-	token    string
 	c        *http.Client
 }
 
-func (c *client) CreateRecords(domain string, records []RecordRequest) error {
+func (c *client) CreateRecords(domain, token string, records []RecordRequest) error {
 	url := fmt.Sprintf("%s/domains/%s/records", c.endpoint, domain)
 
 	for _, recordRequest := range records {
@@ -67,7 +65,7 @@ func (c *client) CreateRecords(domain string, records []RecordRequest) error {
 			return err
 		}
 
-		req, err := c.request(http.MethodPost, url, body, true)
+		req, err := c.request(http.MethodPost, url, body, token)
 		if err != nil {
 			return err
 		}
@@ -80,14 +78,14 @@ func (c *client) CreateRecords(domain string, records []RecordRequest) error {
 	return nil
 }
 
-func (c *client) Renew(domain string, renew RenewRequest) (RenewResponse, error) {
+func (c *client) Renew(domain, token string, renew RenewRequest) (RenewResponse, error) {
 	url := fmt.Sprintf("%v/domains/%v/renew", c.endpoint, domain)
 	body, err := jsonBody(renew)
 	if err != nil {
 		return RenewResponse{}, err
 	}
 
-	req, err := c.request(http.MethodPost, url, body, true)
+	req, err := c.request(http.MethodPost, url, body, token)
 	if err != nil {
 		return RenewResponse{}, err
 	}
@@ -103,7 +101,7 @@ func (c *client) Renew(domain string, renew RenewRequest) (RenewResponse, error)
 func (c *client) ReserveDomain() (string, string, error) {
 	url := fmt.Sprintf("%s/%s", c.endpoint, "domains")
 
-	req, err := c.request(http.MethodPost, url, nil, false)
+	req, err := c.request(http.MethodPost, url, nil, "")
 	if err != nil {
 		return "", "", err
 	}
@@ -121,10 +119,10 @@ func (c *client) ReserveDomain() (string, string, error) {
 	return domain, resp.Token, err
 }
 
-func (c *client) DeleteRecord(domain, prefix string) error {
+func (c *client) DeleteRecord(domain, prefix, token string) error {
 	url := fmt.Sprintf("%v/domains/%v/records/%v", c.endpoint, domain, prefix)
 
-	req, err := c.request(http.MethodDelete, url, nil, true)
+	req, err := c.request(http.MethodDelete, url, nil, token)
 	if err != nil {
 		return err
 	}
@@ -136,15 +134,15 @@ func (c *client) DeleteRecord(domain, prefix string) error {
 	return nil
 }
 
-func (c *client) request(method string, url string, body io.Reader, auth bool) (*http.Request, error) {
+func (c *client) request(method string, url string, body io.Reader, token string) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/json")
 
-	if auth {
-		bearer := "Bearer " + c.token
+	if token != "" {
+		bearer := "Bearer " + token
 		req.Header.Add("Authorization", bearer)
 	}
 

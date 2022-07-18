@@ -102,8 +102,8 @@ func (d *Daemon) internal(ctx context.Context) (bool, error) {
 		}
 	}
 
-	dnsClient := NewClient(*cfg.AcornDNSEndpoint, token)
-	response, err := dnsClient.Renew(domain, RenewRequest{Records: recordRequests})
+	dnsClient := NewClient(*cfg.AcornDNSEndpoint)
+	response, err := dnsClient.Renew(domain, token, RenewRequest{Records: recordRequests})
 	if err != nil {
 		if IsDomainAuthError(err) {
 			if err := ClearDNSToken(ctx, d.client, dnsSecret); err != nil {
