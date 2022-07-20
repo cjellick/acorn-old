@@ -71,7 +71,7 @@ func (c *client) CreateRecords(endpoint, domain, token string, records []RecordR
 			return err
 		}
 
-		err = c.do(req, &RecordResponse{})
+		err = c.do(req, &RecordResponse{}, &authedRateLimit)
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func (c *client) Renew(endpoint, domain, token string, renew RenewRequest) (Rene
 	}
 
 	resp := RenewResponse{}
-	err = c.do(req, &resp)
+	err = c.do(req, &resp, &authedRateLimit)
 	if err != nil {
 		return RenewResponse{}, fmt.Errorf("failed to execute renew request, error: %w", err)
 	}
@@ -108,7 +108,7 @@ func (c *client) ReserveDomain(endpoint string) (string, string, error) {
 	}
 
 	resp := &DomainResponse{}
-	err = c.do(req, resp)
+	err = c.do(req, resp, &unauthedRateLimit)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to reserve domain, error: %w", err)
 	}
@@ -128,7 +128,7 @@ func (c *client) DeleteRecord(endpoint, domain, prefix, token string) error {
 		return err
 	}
 
-	err = c.do(req, nil)
+	err = c.do(req, nil, &authedRateLimit)
 	if err != nil {
 		return fmt.Errorf("failed to execute delete request, error: %w", err)
 	}
@@ -143,7 +143,7 @@ func (c *client) PurgeRecords(endpoint, domain, token string) error {
 		return err
 	}
 
-	err = c.do(req, nil)
+	err = c.do(req, nil, &authedRateLimit)
 	if err != nil {
 		return fmt.Errorf("failed to execute delete request, error: %w", err)
 	}
@@ -165,11 +165,26 @@ func (c *client) request(method string, url string, body io.Reader, token string
 	return req, nil
 }
 
-func (c *client) do(req *http.Request, responseBody interface{}) error {
+func (c *client) do(req *http.Request, responseBody interface{}, rateLimit *rl) error {
+	if rateLimit != nil {
+		if err := checkRateLimit(rateLimit); err != nil {
+			return err
+		}
+	}
+
 	resp, err := c.c.Do(req)
 	if err != nil {
 		return err
 	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		rlErrMsg, err := setRateLimited(resp, rateLimit)
+		if err != nil {
+			return fmt.Errorf("encountered rate limit, but encountered problem processing response: %w", err)
+		}
+		return fmt.Errorf(rlErrMsg)
+	}
+
 	// when err is nil, resp contains a non-nil resp.Body which must be closed
 	defer resp.Body.Close()
 
