@@ -50,11 +50,8 @@ func complete(c *apiv1.Config, ctx context.Context, getter kclient.Reader) error
 	if strings.EqualFold(*c.AcornDNS, "enabled") || (strings.EqualFold(*c.AcornDNS, "auto") && len(c.ClusterDomains) == 0 && !useLocal) {
 		dnsSecret := &corev1.Secret{}
 		err = getter.Get(ctx, router.Key(system.Namespace, system.DNSSecretName), dnsSecret)
-		if err != nil {
-			if !apierror.IsNotFound(err) {
-				return err
-			}
-			return nil
+		if err != nil && !apierror.IsNotFound(err) {
+			return err
 		}
 		domain := string(dnsSecret.Data["domain"])
 		if domain != "" {
