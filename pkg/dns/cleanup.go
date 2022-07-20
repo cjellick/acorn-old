@@ -46,8 +46,8 @@ func CleanupAcornDNSEntries(appInstance *v1.AppInstance, req router.Request, con
 			if domain != "" && token != "" {
 				for h := range oldHostMap {
 					if strings.HasSuffix(h, domain) {
-						dnsClient := NewClient(*cfg.AcornDNSEndpoint)
-						if err := dnsClient.DeleteRecord(domain, strings.TrimSuffix(h, domain), token); err != nil {
+						dnsClient := NewClient()
+						if err := dnsClient.DeleteRecord(*cfg.AcornDNSEndpoint, domain, strings.TrimSuffix(h, domain), token); err != nil {
 							if IsDomainAuthError(err) {
 								if err := ClearDNSToken(req.Ctx, req.Client, secret); err != nil {
 									return err

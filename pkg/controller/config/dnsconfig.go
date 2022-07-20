@@ -29,12 +29,12 @@ func SetupDNS(req router.Request, resp router.Response) error {
 	domain := string(dnsSecret.Data["domain"])
 	token := string(dnsSecret.Data["token"])
 
-	dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint)
+	dnsClient := dns.NewClient()
 
 	// If we are changing from an enabled state to the disabled state, tell the AcornDNS to purge all records for this domain
 	if strings.EqualFold(*cfg.AcornDNS, "disabled") && dnsSecret.Annotations[labels.AcornDNSState] != "disabled" {
 		if domain != "" && token != "" {
-			if err := dnsClient.PurgeRecords(domain, token); err != nil {
+			if err := dnsClient.PurgeRecords(*cfg.AcornDNSEndpoint, domain, token); err != nil {
 				if dns.IsDomainAuthError(err) {
 					if err := dns.ClearDNSToken(req.Ctx, req.Client, dnsSecret); err != nil {
 						return err
@@ -49,7 +49,7 @@ func SetupDNS(req router.Request, resp router.Response) error {
 		if domain != "" {
 			logrus.Infof("Clearing AcornDNS domain  %v", domain)
 		}
-		domain, token, err = dnsClient.ReserveDomain()
+		domain, token, err = dnsClient.ReserveDomain(*cfg.AcornDNSEndpoint)
 		if err != nil {
 			return fmt.Errorf("problem reserving domain: %w", err)
 		}

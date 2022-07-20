@@ -16,20 +16,20 @@ type Client interface {
 
 	// ReserveDomain calls AcornDNS to reserve a new domain. It returns the domain, a token for authentication,
 	// and an error
-	ReserveDomain() (string, string, error)
+	ReserveDomain(endpoint string) (string, string, error)
 
 	// CreateRecords calls AcornDNS to create dns records based on the supplied RecordRequests for the specified domain
-	CreateRecords(domain, token string, records []RecordRequest) error
+	CreateRecords(endpoint, domain, token string, records []RecordRequest) error
 
 	// Renew calls AcornDNS to renew the domain and the records specified in the renewRequest. The response will contain
 	// "out of sync" records, which are records that AcornDNS either doesn't know about or has different values for
-	Renew(domain, token string, renew RenewRequest) (RenewResponse, error)
+	Renew(endpoint, domain, token string, renew RenewRequest) (RenewResponse, error)
 
 	// DeleteRecord calls AcornDNS to delete the record(s) associated with the supplied fqdn
-	DeleteRecord(domain, fqdn, token string) error
+	DeleteRecord(endpoint, domain, fqdn, token string) error
 
 	// PurgeRecords calls AcornDNS to purge all records for the given domain, but doesn't delete the domain itself
-	PurgeRecords(domain, token string) error
+	PurgeRecords(endpoint, domain, token string) error
 }
 
 // AuthFailedNoDomainError indicates that a request failed authentication because the domain was not found. If encountered,
@@ -47,20 +47,18 @@ func IsDomainAuthError(err error) bool {
 }
 
 // NewClient creates a new AcornDNS client
-func NewClient(endpoint string) Client {
+func NewClient() Client {
 	return &client{
-		endpoint: endpoint,
-		c:        http.DefaultClient,
+		c: http.DefaultClient,
 	}
 }
 
 type client struct {
-	endpoint string
-	c        *http.Client
+	c *http.Client
 }
 
-func (c *client) CreateRecords(domain, token string, records []RecordRequest) error {
-	url := fmt.Sprintf("%s/domains/%s/records", c.endpoint, domain)
+func (c *client) CreateRecords(endpoint, domain, token string, records []RecordRequest) error {
+	url := fmt.Sprintf("%s/domains/%s/records", endpoint, domain)
 
 	for _, recordRequest := range records {
 		body, err := jsonBody(recordRequest)
@@ -81,8 +79,8 @@ func (c *client) CreateRecords(domain, token string, records []RecordRequest) er
 	return nil
 }
 
-func (c *client) Renew(domain, token string, renew RenewRequest) (RenewResponse, error) {
-	url := fmt.Sprintf("%v/domains/%v/renew", c.endpoint, domain)
+func (c *client) Renew(endpoint, domain, token string, renew RenewRequest) (RenewResponse, error) {
+	url := fmt.Sprintf("%v/domains/%v/renew", endpoint, domain)
 	body, err := jsonBody(renew)
 	if err != nil {
 		return RenewResponse{}, err
@@ -101,8 +99,8 @@ func (c *client) Renew(domain, token string, renew RenewRequest) (RenewResponse,
 	return resp, nil
 }
 
-func (c *client) ReserveDomain() (string, string, error) {
-	url := fmt.Sprintf("%s/%s", c.endpoint, "domains")
+func (c *client) ReserveDomain(endpoint string) (string, string, error) {
+	url := fmt.Sprintf("%s/%s", endpoint, "domains")
 
 	req, err := c.request(http.MethodPost, url, nil, "")
 	if err != nil {
@@ -122,8 +120,8 @@ func (c *client) ReserveDomain() (string, string, error) {
 	return domain, resp.Token, err
 }
 
-func (c *client) DeleteRecord(domain, prefix, token string) error {
-	url := fmt.Sprintf("%v/domains/%v/records/%v", c.endpoint, domain, prefix)
+func (c *client) DeleteRecord(endpoint, domain, prefix, token string) error {
+	url := fmt.Sprintf("%v/domains/%v/records/%v", endpoint, domain, prefix)
 
 	req, err := c.request(http.MethodDelete, url, nil, token)
 	if err != nil {
@@ -137,8 +135,8 @@ func (c *client) DeleteRecord(domain, prefix, token string) error {
 	return nil
 }
 
-func (c *client) PurgeRecords(domain, token string) error {
-	url := fmt.Sprintf("%v/domains/%v/purgerecords", c.endpoint, domain)
+func (c *client) PurgeRecords(endpoint, domain, token string) error {
+	url := fmt.Sprintf("%v/domains/%v/purgerecords", endpoint, domain)
 
 	req, err := c.request(http.MethodPost, url, nil, token)
 	if err != nil {

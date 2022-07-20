@@ -59,8 +59,8 @@ func SetDNS(req router.Request, resp router.Response) error {
 			return nil
 		}
 
-		dnsClient := dns.NewClient(*cfg.AcornDNSEndpoint)
-		if err := dnsClient.CreateRecords(domain, token, requests); err != nil {
+		dnsClient := dns.NewClient()
+		if err := dnsClient.CreateRecords(*cfg.AcornDNSEndpoint, domain, token, requests); err != nil {
 			if dns.IsDomainAuthError(err) {
 				if err := dns.ClearDNSToken(req.Ctx, req.Client, secret); err != nil {
 					return err
