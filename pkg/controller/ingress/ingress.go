@@ -24,7 +24,18 @@ func RequireLBs(h router.Handler) router.Handler {
 	})
 }
 
-func SetDNS(req router.Request, resp router.Response) error {
+type handler struct {
+	dnsClient dns.Client
+}
+
+func NewDNSHandler() func(router.Request, router.Response) error {
+	s := handler{
+		dns.NewClient(),
+	}
+	return s.SetDNS
+}
+
+func (h *handler) SetDNS(req router.Request, resp router.Response) error {
 	cfg, err := config.Get(req.Ctx, req.Client)
 	if err != nil {
 		return err
@@ -59,8 +70,7 @@ func SetDNS(req router.Request, resp router.Response) error {
 			return nil
 		}
 
-		dnsClient := dns.NewClient()
-		if err := dnsClient.CreateRecords(*cfg.AcornDNSEndpoint, domain, token, requests); err != nil {
+		if err := h.dnsClient.CreateRecords(*cfg.AcornDNSEndpoint, domain, token, requests); err != nil {
 			if dns.IsDomainAuthError(err) {
 				if err := dns.ClearDNSToken(req.Ctx, req.Client, secret); err != nil {
 					return err
