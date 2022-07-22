@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Client handles interactions with the AcornDNS API service and Acorn.
@@ -166,6 +168,7 @@ func (c *client) request(method string, url string, body io.Reader, token string
 }
 
 func (c *client) do(req *http.Request, responseBody interface{}, rateLimit *rl) error {
+	logrus.Debugf("Making DNS request %v %v", req.Method, req.URL)
 	if rateLimit != nil {
 		if err := checkRateLimit(rateLimit); err != nil {
 			return err
@@ -176,6 +179,8 @@ func (c *client) do(req *http.Request, responseBody interface{}, rateLimit *rl) 
 	if err != nil {
 		return err
 	}
+
+	logrus.Debugf("Resposne code %v for DNS request %v %v", resp.StatusCode, req.Method, req.URL)
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		rlErrMsg, err := setRateLimited(resp, rateLimit)
