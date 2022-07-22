@@ -6,6 +6,7 @@ import (
 	"github.com/acorn-io/acorn/pkg/dns"
 	"github.com/acorn-io/acorn/pkg/scheme"
 	"github.com/acorn-io/baaah/pkg/router/tester"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestBasicDNS is a simple test that asserts the basic logic of calling the DNS service to create an FQDN for an
@@ -24,7 +25,20 @@ func TestBasicDNS(t *testing.T) {
 	h := &handler{
 		dnsClient: &mockClient{},
 	}
-	tester.DefaultTest(t, scheme.Scheme, "testdata/ingress", h.SetDNS)
+
+	harness, input, err := tester.FromDir(scheme.Scheme, "testdata/ingress")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := harness.Invoke(t, input, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Len(t, resp.Client.Updated, 1)
+	ingress := resp.Client.Updated[0]
+	assert.NotEmpty(t, ingress.GetAnnotations()["acorn.io/dns-hash"])
 }
 
 // TODO Use a mock library to create more robust mock for this. Right now, just CreateRecord has been implemented to

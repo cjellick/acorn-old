@@ -49,6 +49,6 @@ func routes(router *router.Router) {
 	router.Type(&corev1.Namespace{}).Selector(managedSelector).HandlerFunc(namespace.DeleteOrphaned)
 	router.Type(&appsv1.DaemonSet{}).Namespace(system.Namespace).HandlerFunc(acornrouter.GCAcornRouter)
 	router.Type(&corev1.Service{}).Namespace(system.Namespace).HandlerFunc(acornrouter.GCAcornRouterService)
-	router.Type(&netv1.Ingress{}).Selector(managedSelector).Middleware(ingress.RequireLBs).HandlerFunc(ingress.NewDNSHandler())
+	router.Type(&netv1.Ingress{}).Selector(managedSelector).Middleware(ingress.RequireLBs).Handler(ingress.NewDNSHandler())
 	router.Type(&corev1.ConfigMap{}).Namespace(system.Namespace).Name(system.ConfigName).HandlerFunc(config.SetupDNS)
 }

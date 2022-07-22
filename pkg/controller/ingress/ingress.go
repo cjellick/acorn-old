@@ -28,14 +28,14 @@ type handler struct {
 	dnsClient dns.Client
 }
 
-func NewDNSHandler() func(router.Request, router.Response) error {
-	s := handler{
+func NewDNSHandler() router.Handler {
+	s := &handler{
 		dns.NewClient(),
 	}
-	return s.SetDNS
+	return s
 }
 
-func (h *handler) SetDNS(req router.Request, resp router.Response) error {
+func (h *handler) Handle(req router.Request, resp router.Response) error {
 	cfg, err := config.Get(req.Ctx, req.Client)
 	if err != nil {
 		return err
