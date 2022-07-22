@@ -36,7 +36,7 @@ func complete(c *apiv1.Config, ctx context.Context, getter kclient.Reader) error
 	if c.AcornDNS == nil {
 		c.AcornDNS = &[]string{"auto"}[0]
 	}
-	if c.AcornDNSEndpoint == nil {
+	if c.AcornDNSEndpoint == nil || *c.AcornDNSEndpoint == "" {
 		c.AcornDNSEndpoint = &AcornDNSEndpointDefault
 	}
 
