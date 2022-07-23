@@ -10,7 +10,6 @@ import (
 
 	v1 "github.com/acorn-io/acorn/pkg/apis/internal.acorn.io/v1"
 	"github.com/acorn-io/acorn/pkg/config"
-	"github.com/acorn-io/acorn/pkg/dns"
 	"github.com/acorn-io/acorn/pkg/labels"
 	"github.com/acorn-io/acorn/pkg/ports"
 	"github.com/acorn-io/acorn/pkg/system"
@@ -235,12 +234,6 @@ func addIngress(appInstance *v1.AppInstance, req router.Request, resp router.Res
 			})
 			//Override the secret name to the copied name
 			tlsIngress[i].SecretName = secretName
-		}
-
-		// If the ingress already exists and if we are dropping an Acorn DNS host name, make
-		// a call to Acorn DNS to delete that record.
-		if err := dns.CleanupAcornDNSEntries(appInstance, req, containerName, hosts, cfg); err != nil {
-			return nil
 		}
 
 		resp.Objects(&networkingv1.Ingress{
