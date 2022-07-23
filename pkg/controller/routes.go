@@ -4,9 +4,8 @@ import (
 	v1 "github.com/acorn-io/acorn/pkg/apis/internal.acorn.io/v1"
 	"github.com/acorn-io/acorn/pkg/controller/acornrouter"
 	"github.com/acorn-io/acorn/pkg/controller/appdefinition"
-	"github.com/acorn-io/acorn/pkg/controller/config"
+	"github.com/acorn-io/acorn/pkg/controller/dns"
 	"github.com/acorn-io/acorn/pkg/controller/gc"
-	"github.com/acorn-io/acorn/pkg/controller/ingress"
 	"github.com/acorn-io/acorn/pkg/controller/namespace"
 	"github.com/acorn-io/acorn/pkg/controller/pvc"
 	"github.com/acorn-io/acorn/pkg/labels"
@@ -49,6 +48,6 @@ func routes(router *router.Router) {
 	router.Type(&corev1.Namespace{}).Selector(managedSelector).HandlerFunc(namespace.DeleteOrphaned)
 	router.Type(&appsv1.DaemonSet{}).Namespace(system.Namespace).HandlerFunc(acornrouter.GCAcornRouter)
 	router.Type(&corev1.Service{}).Namespace(system.Namespace).HandlerFunc(acornrouter.GCAcornRouterService)
-	router.Type(&netv1.Ingress{}).Selector(managedSelector).Middleware(ingress.RequireLBs).Handler(ingress.NewDNSHandler())
-	router.Type(&corev1.ConfigMap{}).Namespace(system.Namespace).Name(system.ConfigName).HandlerFunc(config.SetupDNS)
+	router.Type(&netv1.Ingress{}).Selector(managedSelector).Middleware(dns.RequireLBs).Handler(dns.NewDNSHandler())
+	router.Type(&corev1.ConfigMap{}).Namespace(system.Namespace).Name(system.ConfigName).Handler(dns.NewDNSConfigHandler())
 }

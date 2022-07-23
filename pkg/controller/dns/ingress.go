@@ -1,4 +1,4 @@
-package ingress
+package dns
 
 import (
 	"github.com/acorn-io/acorn/pkg/config"

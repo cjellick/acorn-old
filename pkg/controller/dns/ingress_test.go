@@ -1,4 +1,4 @@
-package ingress
+package dns
 
 import (
 	"testing"
@@ -50,8 +50,7 @@ func (t *mockClient) CreateRecords(endpoint, domain, token string, records []dns
 }
 
 func (t *mockClient) ReserveDomain(endpoint string) (string, string, error) {
-	//TODO implement me
-	panic("implement me")
+	return "test.on-acorn.io", "token", nil
 }
 
 func (t *mockClient) Renew(endpoint, domain, token string, renew dns.RenewRequest) (dns.RenewResponse, error) {
@@ -65,6 +64,5 @@ func (t *mockClient) DeleteRecord(endpoint, domain, fqdn, token string) error {
 }
 
 func (t *mockClient) PurgeRecords(endpoint, domain, token string) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
